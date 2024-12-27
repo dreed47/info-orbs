@@ -15,6 +15,7 @@ public:
     void draw(bool force = false) override;
     void buttonPressed(uint8_t buttonId, ButtonState state) override;
     String getName() override;
+    void processWeatherData(const std::string& payload, int statusCode, const std::string& error);
 
 private:
     void displayClock(int displayIndex);

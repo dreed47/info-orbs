@@ -6,6 +6,7 @@
 #include "weatherwidget/WeatherWidget.h"
 #include "webdatawidget/WebDataWidget.h"
 #include "wifiwidget/WifiWidget.h"
+#include "HTTPClientWrapper.h"
 
 TFT_eSPI tft = TFT_eSPI();
 
@@ -89,7 +90,9 @@ void loop() {
 
         MainHelper::checkCycleWidgets();
         wifiManager->process();
+        HTTPClientWrapper::processAwaitingRequests(); // Process any awaiting requests
     }
+
 #ifdef MEMORY_DEBUG
     ShowMemoryUsage::printSerial();
 #endif
