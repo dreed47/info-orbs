@@ -29,6 +29,7 @@ private:
     static void httpTask(void* pvParameters);
     static SemaphoreHandle_t semaphore; // Make semaphore static
     static std::queue<HttpRequestParams*> awaitingRequests; // FIFO stack for awaiting requests
+    static TaskHandle_t m_taskHandle;  // Changed to static
 };
 
 #endif // HTTPCLIENTWRAPPER_H
