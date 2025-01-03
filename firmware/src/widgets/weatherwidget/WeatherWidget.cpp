@@ -1,18 +1,6 @@
-// TODO:
-// 1
-// factor out a selectDisplay that selects the dispay and returns the workable object,
-// so we don't have this select, getDisplay crap all over the place
-// 2
-// make high/low an enum, if we even keep it (I strongly suggest just switching back
-// and forth between high and low every 10 seconds or something)
-// 3
-// factor out the text wrapping (there's a utils for that already, if that doesn't work, why not?)
-
 #include "WeatherWidget.h"
-
 #include "icons.h"
 #include <ArduinoJson.h>
-
 
 WeatherWidget::WeatherWidget(ScreenManager &manager, ConfigManager &config) : Widget(manager, config) {
     m_enabled = true; // Enabled by default
@@ -86,13 +74,17 @@ bool WeatherWidget::getWeatherData() {
                                String(m_weatherLocation.c_str()) + "/next3days?key=" + weatherApiKey + "&unitGroup=" + weatherUnits +
                                "&include=days,current&iconSet=icons1&lang=" + LOC_LANG;
 
-    return HTTPClientWrapper::getInstance()->addRequest(httpRequestAddress,
+    // Use the new addTask method with the task type "httpTask"
+    return TaskManager::getInstance()->addTask(
+        "httpTask",  // Task type (maps to httpTask in TaskManager)
+        httpRequestAddress,
         [this](int httpCode, const String& response) {
             processResponse(httpCode, response);
         },
         [this](int httpCode, String& response) {
             preProcessResponse(httpCode, response);
-        });
+        }
+    );
 }
 
 void WeatherWidget::preProcessResponse(int httpCode, String& response) {
@@ -144,6 +136,7 @@ void WeatherWidget::processResponse(int httpCode, const String& response) {
         Serial.printf("HTTP request failed, error code: %d\n", httpCode);
     }
 }
+
 
 void WeatherWidget::displayClock(int displayIndex) {
     const int clockY = 120;

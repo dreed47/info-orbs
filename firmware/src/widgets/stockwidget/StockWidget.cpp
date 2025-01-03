@@ -49,14 +49,16 @@ void StockWidget::update(bool force) {
             String url = "https://api.twelvedata.com/quote?apikey=e03fc53524454ab8b65d91b23c669cc5&symbol=" + m_stocks[i].getSymbol();
             
             StockDataModel& stock = m_stocks[i];
-            HTTPClientWrapper::getInstance()->addRequest(url,
+            TaskManager::getInstance()->addTask(
+                "httpTask",  // Task type (maps to httpTask in TaskManager)
+                url,
                 [this, &stock](int httpCode, const String& response) {
                     processResponse(stock, httpCode, response);
-                });
+                }
+            );
         }
         
         m_stockDelayPrev = millis();
-
     }
 }
 

@@ -3,7 +3,7 @@
 
 #include <ArduinoJson.h>
 #include <TFT_eSPI.h>
-#include <HTTPClientWrapper.h>
+#include "TaskManager.h"  
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
