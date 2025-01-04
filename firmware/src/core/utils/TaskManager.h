@@ -14,7 +14,7 @@ public:
     using PreProcessCallback = std::function<void(int httpCode, String &response)>;
 
     static TaskManager *getInstance();
-    bool addRequest(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse = nullptr);
+    bool addTask(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse = nullptr);
     void processAwaitingTasks(); // Renamed from processRequestQueue
     void processTaskResponses(); // Renamed from processResponseQueue
 

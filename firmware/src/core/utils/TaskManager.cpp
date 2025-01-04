@@ -27,7 +27,7 @@ TaskManager *TaskManager::getInstance() {
     return instance;
 }
 
-bool TaskManager::addRequest(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse) {
+bool TaskManager::addTask(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse) {
     if (isUrlInQueue(url)) {
         Serial.printf("Request already in queue: %s\n", url.c_str());
         return false;
