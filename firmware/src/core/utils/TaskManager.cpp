@@ -27,21 +27,23 @@ TaskManager *TaskManager::getInstance() {
     return instance;
 }
 
-bool TaskManager::addTask(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse) {
+bool TaskManager::addTask(const String &url, ResponseCallback callback,
+                          PreProcessCallback preProcessResponse,
+                          TaskExecCallback taskExec) {
     if (isUrlInQueue(url)) {
         Serial.printf("Request already in queue: %s\n", url.c_str());
         return false;
     }
 
-    auto *params = new RequestParams{url, callback, preProcessResponse};
+    auto *params = new RequestParams{url, callback, preProcessResponse, taskExec};
 
     if (xQueueSend(requestQueue, &params, 0) != pdPASS) {
         delete params;
-        Serial.println("Failed to queue HTTP request");
+        Serial.println("Failed to queue task");
         return false;
     }
 
-    Serial.printf("Queued request: %s (Queue length: %d)\n", url.c_str(), uxQueueMessagesWaiting(requestQueue));
+    Serial.printf("Task queued: %s\n", url.c_str());
     return true;
 }
 
@@ -81,13 +83,24 @@ void TaskManager::processAwaitingTasks() { // Renamed from processRequestQueue
 
     // Create task to handle request
     TaskHandle_t taskHandle;
-    BaseType_t result = xTaskCreate(
-        httpTask,
-        "HTTP_REQ",
-        STACK_SIZE,
-        requestParams, // Pass params to task
-        TASK_PRIORITY,
-        &taskHandle);
+    BaseType_t result;
+    if (requestParams->taskExec) {
+        result = xTaskCreate(
+            execTask, // Use our static wrapper method
+            "TASK_EXEC",
+            STACK_SIZE,
+            requestParams, // Pass params to execTask
+            TASK_PRIORITY,
+            &taskHandle);
+    } else {
+        result = xTaskCreate(
+            httpTask,
+            "HTTP_REQ",
+            STACK_SIZE,
+            requestParams,
+            TASK_PRIORITY,
+            &taskHandle);
+    }
 
     if (result != pdPASS) {
         Serial.println("Failed to create HTTP request task");
@@ -97,9 +110,34 @@ void TaskManager::processAwaitingTasks() { // Renamed from processRequestQueue
     }
 }
 
+void TaskManager::execTask(void *params) {
+    auto *requestParams = static_cast<RequestParams *>(params);
+
+    if (requestParams->taskExec) {
+        requestParams->taskExec(); // Execute the callback
+    }
+
+    delete requestParams;
+    Utils::setBusy(false);
+    xSemaphoreGive(taskSemaphore);
+    Serial.println("✅ Released semaphore");
+    vTaskDelete(nullptr);
+}
+
 void TaskManager::httpTask(void *params) {
     auto *requestParams = static_cast<RequestParams *>(params);
 
+    // Execute custom task if provided
+    if (requestParams->taskExec) {
+        requestParams->taskExec();
+        delete requestParams;
+        Utils::setBusy(false);
+        xSemaphoreGive(taskSemaphore);
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    // Otherwise execute default HTTP task
     Serial.printf("🔵 Starting HTTP request for: %s\n", requestParams->url.c_str());
 
     {

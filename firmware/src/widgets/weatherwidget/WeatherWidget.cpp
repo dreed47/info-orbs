@@ -86,7 +86,9 @@ bool WeatherWidget::getWeatherData() {
                                String(m_weatherLocation.c_str()) + "/next3days?key=" + weatherApiKey + "&unitGroup=" + weatherUnits +
                                "&include=days,current&iconSet=icons1&lang=" + LOC_LANG;
 
-    return TaskManager::getInstance()->addTask(httpRequestAddress, [this](int httpCode, const String &response) { processResponse(httpCode, response); }, [this](int httpCode, String &response) { preProcessResponse(httpCode, response); });
+    return TaskManager::getInstance()->addTask(httpRequestAddress, [this](int httpCode, const String &response) { processResponse(httpCode, response); }, [this](int httpCode, String &response) { preProcessResponse(httpCode, response); },
+                                               nullptr // Using default HTTP behavior
+    );
 }
 
 void WeatherWidget::preProcessResponse(int httpCode, String& response) {

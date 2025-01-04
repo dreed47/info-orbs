@@ -12,11 +12,16 @@ class TaskManager {
 public:
     using ResponseCallback = std::function<void(int httpCode, const String &response)>;
     using PreProcessCallback = std::function<void(int httpCode, String &response)>;
+    using TaskExecCallback = std::function<void(void)>;
 
     static TaskManager *getInstance();
-    bool addTask(const String &url, ResponseCallback callback, PreProcessCallback preProcessResponse = nullptr);
+    bool addTask(const String &url, ResponseCallback callback,
+                 PreProcessCallback preProcessResponse = nullptr,
+                 TaskExecCallback taskExec = nullptr);
     void processAwaitingTasks(); // Renamed from processRequestQueue
     void processTaskResponses(); // Renamed from processResponseQueue
+
+    static void execTask(void *params); // Add this new static method
 
 private:
     // Add debug counters
@@ -31,6 +36,7 @@ private:
         String url;
         ResponseCallback callback;
         PreProcessCallback preProcessResponse;
+        TaskExecCallback taskExec;
     };
 
     struct ResponseData {
