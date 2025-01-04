@@ -84,23 +84,30 @@ void TaskManager::processAwaitingTasks() { // Renamed from processRequestQueue
     // Create task to handle request
     TaskHandle_t taskHandle;
     BaseType_t result;
-    if (taskParams->taskExec) { // Updated variable name
-        result = xTaskCreate(
-            execTask, // Use our static wrapper method
-            "TASK_EXEC",
-            STACK_SIZE,
-            taskParams, // Updated variable name
-            TASK_PRIORITY,
-            &taskHandle);
-    } else {
-        result = xTaskCreate(
-            httpTask,
-            "HTTP_REQ",
-            STACK_SIZE,
-            taskParams,
-            TASK_PRIORITY,
-            &taskHandle);
-    }
+
+    // Use taskParams->taskExec if provided, otherwise wrap httpTask in a lambda
+    TaskExecCallback taskToExecute = taskParams->taskExec ? taskParams->taskExec : [taskParams]() {
+        httpTask(taskParams); // Wrap httpTask in a lambda to match TaskExecCallback type
+    };
+
+    result = xTaskCreate(
+        [](void *params) {
+            auto *taskParams = static_cast<TaskParams *>(params);
+            if (taskParams->taskExec) {
+                taskParams->taskExec(); // Execute the custom task
+            } else {
+                httpTask(taskParams); // Execute the default HTTP task
+            }
+            delete taskParams;
+            Utils::setBusy(false);
+            xSemaphoreGive(taskSemaphore);
+            vTaskDelete(nullptr);
+        },
+        "TASK_EXEC",
+        STACK_SIZE,
+        taskParams,
+        TASK_PRIORITY,
+        &taskHandle);
 
     if (result != pdPASS) {
         Serial.println("Failed to create HTTP request task");
@@ -110,34 +117,10 @@ void TaskManager::processAwaitingTasks() { // Renamed from processRequestQueue
     }
 }
 
-void TaskManager::execTask(void *params) {
-    auto *taskParams = static_cast<TaskParams *>(params); // Updated type and variable name
-
-    if (taskParams->taskExec) {
-        taskParams->taskExec(); // Execute the callback
-    }
-
-    delete taskParams;
-    Utils::setBusy(false);
-    xSemaphoreGive(taskSemaphore);
-    Serial.println("✅ Released semaphore");
-    vTaskDelete(nullptr);
-}
-
 void TaskManager::httpTask(void *params) {
     auto *taskParams = static_cast<TaskParams *>(params); // Updated type and variable name
 
-    // Execute custom task if provided
-    if (taskParams->taskExec) {
-        taskParams->taskExec();
-        delete taskParams;
-        Utils::setBusy(false);
-        xSemaphoreGive(taskSemaphore);
-        vTaskDelete(nullptr);
-        return;
-    }
-
-    // Otherwise execute default HTTP task
+    // Execute default HTTP task
     Serial.printf("🔵 Starting HTTP request for: %s\n", taskParams->url.c_str());
 
     {
@@ -180,10 +163,6 @@ void TaskManager::httpTask(void *params) {
             delete responseData;
         }
     }
-
-    // UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-    // Serial.print("Remaining task stack space: ");
-    // Serial.println(highWater);
 
     Serial.printf("🟢 Completed HTTP request for: %s\n", taskParams->url.c_str());
     activeRequests--;

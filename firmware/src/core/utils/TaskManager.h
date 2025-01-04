@@ -20,16 +20,6 @@ public:
                  TaskExecCallback taskExec = nullptr);
     void processAwaitingTasks(); // Renamed from processRequestQueue
     void processTaskResponses(); // Renamed from processResponseQueue
-
-    static void execTask(void *params); // Add this new static method
-
-private:
-    // Add debug counters
-    static volatile uint32_t activeRequests;
-    static volatile uint32_t maxConcurrentRequests;
-
-    TaskManager();
-
     static void httpTask(void *params);
 
     struct TaskParams { // Renamed from RequestParams
@@ -38,6 +28,13 @@ private:
         PreProcessCallback preProcessResponse;
         TaskExecCallback taskExec;
     };
+
+private:
+    // Add debug counters
+    static volatile uint32_t activeRequests;
+    static volatile uint32_t maxConcurrentRequests;
+
+    TaskManager();
 
     struct ResponseData {
         int httpCode;
