@@ -3,13 +3,14 @@
 #include "Utils.h"
 #include <HTTPClient.h>
 
+// Define static members
 TaskManager *TaskManager::instance = nullptr;
 QueueHandle_t TaskManager::requestQueue = nullptr;
 QueueHandle_t TaskManager::responseQueue = nullptr;
 
 // Initialize static debug counters
-volatile uint32_t TaskManager::activeRequests = 0;
-volatile uint32_t TaskManager::maxConcurrentRequests = 0;
+volatile uint32_t TaskManager::activeRequests = 0; // Define as static
+volatile uint32_t TaskManager::maxConcurrentRequests = 0; // Define as static
 
 TaskManager::TaskManager() {
     if (!requestQueue) {
@@ -27,15 +28,13 @@ TaskManager *TaskManager::getInstance() {
     return instance;
 }
 
-bool TaskManager::addTask(const String &url, ResponseCallback callback,
-                          PreProcessCallback preProcessResponse,
-                          TaskExecCallback taskExec) {
-    if (isUrlInQueue(url)) {
-        Serial.printf("Request already in queue: %s\n", url.c_str());
+bool TaskManager::addTask(Task *task) {
+    if (isUrlInQueue(task->url)) {
+        Serial.printf("Request already in queue: %s\n", task->url.c_str());
         return false;
     }
 
-    auto *params = new TaskParams{url, callback, preProcessResponse, taskExec}; // Updated type
+    auto *params = new TaskParams{task->url, task->callback, task->preProcessResponse, task->taskExec};
 
     if (xQueueSend(requestQueue, &params, 0) != pdPASS) {
         delete params;
@@ -43,84 +42,79 @@ bool TaskManager::addTask(const String &url, ResponseCallback callback,
         return false;
     }
 
-    Serial.printf("Task queued: %s\n", url.c_str());
+    Serial.printf("Task queued: %s\n", task->url.c_str());
     return true;
 }
 
-void TaskManager::processAwaitingTasks() { // Renamed from processRequestQueue
-    // First check if there are any requests to process
+void TaskManager::processAwaitingTasks() {
     if (uxQueueMessagesWaiting(requestQueue) == 0) {
-        return; // No requests in queue
-    }
-
-    // Only try to take semaphore if we have work to do
-    if (xSemaphoreTake(taskSemaphore, 0) != pdTRUE) {
-        // Serial.println("⚠️ Semaphore blocked - request already in progress");
         return;
     }
 
-    Utils::setBusy(true);
-    Serial.println("✅ Obtained semaphore");
-    activeRequests++;
-    if (activeRequests > maxConcurrentRequests) {
-        maxConcurrentRequests = activeRequests;
-    }
-    Serial.printf("Active requests: %d (Max seen: %d)\n", activeRequests, maxConcurrentRequests);
+    // Acquire the global semaphore to ensure only one task runs at a time
+    if (xSemaphoreTake(taskSemaphore, QUEUE_CHECK_DELAY) == pdTRUE) {
+        Utils::setBusy(true);
+        Serial.println("✅ Obtained semaphore");
+        activeRequests++;
+        if (activeRequests > maxConcurrentRequests) {
+            maxConcurrentRequests = activeRequests;
+        }
+        Serial.printf("Active requests: %d (Max seen: %d)\n", activeRequests, maxConcurrentRequests);
 
-    // Get next request
-    TaskParams *taskParams; // Updated type and variable name
-    if (xQueueReceive(requestQueue, &taskParams, 0) != pdPASS) {
-        Serial.println("⚠️ Queue empty after size check!");
-        activeRequests--;
-        Utils::setBusy(false);
-        xSemaphoreGive(taskSemaphore);
-        return;
-    }
+        TaskParams *taskParams;
+        if (xQueueReceive(requestQueue, &taskParams, 0) != pdPASS) {
+            Serial.println("⚠️ Queue empty after size check!");
+            activeRequests--;
+            Utils::setBusy(false);
+            xSemaphoreGive(taskSemaphore); // Release the semaphore
+            return;
+        }
 
-    Serial.printf("Processing request: %s (Remaining in queue: %d)\n",
-                  taskParams->url.c_str(), // Updated variable name
-                  uxQueueMessagesWaiting(requestQueue));
+        Serial.printf("Processing request: %s (Remaining in queue: %d)\n",
+                      taskParams->url.c_str(),
+                      uxQueueMessagesWaiting(requestQueue));
 
-    // Create task to handle request
-    TaskHandle_t taskHandle;
-    BaseType_t result;
+        TaskHandle_t taskHandle;
+        BaseType_t result;
 
-    // Use taskParams->taskExec if provided, otherwise wrap httpTask in a lambda
-    TaskExecCallback taskToExecute = taskParams->taskExec ? taskParams->taskExec : [taskParams]() {
-        httpTask(taskParams); // Wrap httpTask in a lambda to match TaskExecCallback type
-    };
+        // Use httpTask as the default execution method if taskExec is nullptr
+        TaskExecCallback taskToExecute = taskParams->taskExec ? taskParams->taskExec : [taskParams]() {
+            httpTask(taskParams);
+        };
 
-    result = xTaskCreate(
-        [](void *params) {
-            auto *taskParams = static_cast<TaskParams *>(params);
-            if (taskParams->taskExec) {
-                taskParams->taskExec(); // Execute the custom task
-            } else {
-                httpTask(taskParams); // Execute the default HTTP task
-            }
+        result = xTaskCreate(
+            [](void *params) {
+                auto *taskParams = static_cast<TaskParams *>(params);
+                if (taskParams->taskExec) {
+                    taskParams->taskExec(); // Execute the custom taskExec callback
+                } else {
+                    httpTask(taskParams); // Execute the default HTTP task
+                }
+                delete taskParams;
+                Utils::setBusy(false);
+                xSemaphoreGive(taskSemaphore); // Release the semaphore after task completion
+                vTaskDelete(nullptr);
+            },
+            "TASK_EXEC",
+            STACK_SIZE,
+            taskParams,
+            TASK_PRIORITY,
+            &taskHandle);
+
+        if (result != pdPASS) {
+            Serial.println("Failed to create HTTP request task");
             delete taskParams;
             Utils::setBusy(false);
-            xSemaphoreGive(taskSemaphore);
-            vTaskDelete(nullptr);
-        },
-        "TASK_EXEC",
-        STACK_SIZE,
-        taskParams,
-        TASK_PRIORITY,
-        &taskHandle);
-
-    if (result != pdPASS) {
-        Serial.println("Failed to create HTTP request task");
-        delete taskParams;
-        Utils::setBusy(false);
-        xSemaphoreGive(taskSemaphore);
+            xSemaphoreGive(taskSemaphore); // Release the semaphore on failure
+        }
+    } else {
+        // Serial.println("⚠️ Could not acquire semaphore, skipping task processing");
     }
 }
 
 void TaskManager::httpTask(void *params) {
-    auto *taskParams = static_cast<TaskParams *>(params); // Updated type and variable name
+    auto *taskParams = static_cast<TaskParams *>(params);
 
-    // Execute default HTTP task
     Serial.printf("🔵 Starting HTTP request for: %s\n", taskParams->url.c_str());
 
     {
@@ -136,6 +130,9 @@ void TaskManager::httpTask(void *params) {
 
         if (httpCode > 0) {
             response = http.getString();
+            // Serial.printf("🟢 HTTP response for %s:\n%s\n", taskParams->url.c_str(), response.c_str());
+        } else {
+            Serial.printf("🔴 HTTP request failed, error code: %d\n", httpCode);
         }
 
         http.end();
@@ -170,13 +167,12 @@ void TaskManager::httpTask(void *params) {
 
     delete taskParams;
     Utils::setBusy(false);
-    xSemaphoreGive(taskSemaphore);
+    xSemaphoreGive(taskSemaphore); // Release the semaphore after task completion
     Serial.println("✅ Released semaphore");
     vTaskDelete(nullptr);
 }
 
-void TaskManager::processTaskResponses() { // Renamed from processResponseQueue
-    // Early exit if queue is empty
+void TaskManager::processTaskResponses() {
     if (uxQueueMessagesWaiting(responseQueue) == 0) {
         return;
     }
@@ -189,18 +185,16 @@ void TaskManager::processTaskResponses() { // Renamed from processResponseQueue
 }
 
 bool TaskManager::isUrlInQueue(const String &url) {
-    // Iterate through the queue to check for duplicate URLs
     UBaseType_t queueLength = uxQueueMessagesWaiting(requestQueue);
     for (UBaseType_t i = 0; i < queueLength; i++) {
-        TaskParams *taskParams; // Updated type and variable name
+        TaskParams *taskParams;
         if (xQueuePeek(requestQueue, &taskParams, 0) == pdPASS) {
-            if (taskParams->url == url) { // Updated variable name
-                return true; // Duplicate URL found
+            if (taskParams->url == url) {
+                return true;
             }
-            // Move to the next item in the queue
             xQueueReceive(requestQueue, &taskParams, 0);
             xQueueSend(requestQueue, &taskParams, 0);
         }
     }
-    return false; // No duplicate URL found
+    return false;
 }

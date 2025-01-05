@@ -1,4 +1,5 @@
 #include "WeatherWidget.h"
+#include "TaskFactory.h"
 #include "icons.h"
 #include <ArduinoJson.h>
 
@@ -74,22 +75,13 @@ bool WeatherWidget::getWeatherData() {
                                String(m_weatherLocation.c_str()) + "/next3days?key=" + weatherApiKey + "&unitGroup=" + weatherUnits +
                                "&include=days,current&iconSet=icons1&lang=" + LOC_LANG;
 
-    // Create a TaskParams object with valid data
-    auto *taskParams = new TaskManager::TaskParams();
-    taskParams->url = httpRequestAddress;
-    taskParams->callback = [this](int httpCode, const String &response) { processResponse(httpCode, response); };
-    taskParams->preProcessResponse = [this](int httpCode, String &response) { preProcessResponse(httpCode, response); };
-    taskParams->taskExec = nullptr; // Not needed for httpTask
+    // Create a task using TaskFactory
+    Task *task = TaskFactory::createHttpTask(httpRequestAddress, [this](int httpCode, const String &response) {
+        processResponse(httpCode, response);
+    });
 
-    // Pass httpTask as the taskExec callback
-    return TaskManager::getInstance()->addTask(
-        httpRequestAddress,
-        taskParams->callback,
-        taskParams->preProcessResponse,
-        [taskParams](void) mutable {
-            // Call httpTask with the TaskParams object
-            TaskManager::httpTask(taskParams);
-        });
+    // Add the task to the TaskManager
+    return TaskManager::getInstance()->addTask(task);
 }
 
 void WeatherWidget::preProcessResponse(int httpCode, String& response) {
