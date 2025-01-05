@@ -79,7 +79,16 @@ bool WeatherWidget::getWeatherData() {
         processResponse(httpCode, response);
     });
 
-    return TaskManager::getInstance()->addTask(std::move(task));
+    if (!task) {
+        Serial.println("Failed to create weather task");
+        return false;
+    }
+
+    bool success = TaskManager::getInstance()->addTask(std::move(task));
+    if (!success) {
+        Serial.println("Failed to add weather task");
+    }
+    return success;
 }
 
 void WeatherWidget::preProcessResponse(int httpCode, String& response) {
