@@ -2,15 +2,14 @@
 #include "GlobalResources.h"
 #include "Utils.h"
 #include <HTTPClient.h>
+#include <memory>
 
 // Define static members
 TaskManager *TaskManager::instance = nullptr;
 QueueHandle_t TaskManager::requestQueue = nullptr;
 QueueHandle_t TaskManager::responseQueue = nullptr;
-
-// Initialize static debug counters
-volatile uint32_t TaskManager::activeRequests = 0; // Define as static
-volatile uint32_t TaskManager::maxConcurrentRequests = 0; // Define as static
+volatile uint32_t TaskManager::activeRequests = 0; // Definition (not extern)
+volatile uint32_t TaskManager::maxConcurrentRequests = 0; // Definition (not extern)
 
 TaskManager::TaskManager() {
     if (!requestQueue) {
@@ -28,148 +27,77 @@ TaskManager *TaskManager::getInstance() {
     return instance;
 }
 
-bool TaskManager::addTask(Task *task) {
+bool TaskManager::addTask(std::unique_ptr<Task> task) {
     if (isUrlInQueue(task->url)) {
-        Serial.printf("Request already in queue: %s\n", task->url.c_str());
-        return false;
+        return false; // Task is automatically cleaned up when unique_ptr goes out of scope
     }
 
     auto *params = new TaskParams{task->url, task->callback, task->preProcessResponse, task->taskExec};
-
     if (xQueueSend(requestQueue, &params, 0) != pdPASS) {
         delete params;
-        Serial.println("Failed to queue task");
         return false;
     }
 
-    Serial.printf("Task queued: %s\n", task->url.c_str());
-    return true;
+    return true; // task is automatically cleaned up when unique_ptr goes out of scope
 }
 
 void TaskManager::processAwaitingTasks() {
+    // First check if there are any requests to process
     if (uxQueueMessagesWaiting(requestQueue) == 0) {
+        return; // No requests in queue
+    }
+
+    // Only try to take semaphore if we have work to do
+    if (xSemaphoreTake(taskSemaphore, 0) != pdTRUE) {
         return;
     }
 
-    // Acquire the global semaphore to ensure only one task runs at a time
-    if (xSemaphoreTake(taskSemaphore, QUEUE_CHECK_DELAY) == pdTRUE) {
-        Utils::setBusy(true);
-        Serial.println("✅ Obtained semaphore");
-        activeRequests++;
-        if (activeRequests > maxConcurrentRequests) {
-            maxConcurrentRequests = activeRequests;
-        }
-        Serial.printf("Active requests: %d (Max seen: %d)\n", activeRequests, maxConcurrentRequests);
+    Utils::setBusy(true);
+    Serial.println("✅ Obtained semaphore");
+    activeRequests++;
 
-        TaskParams *taskParams;
-        if (xQueueReceive(requestQueue, &taskParams, 0) != pdPASS) {
-            Serial.println("⚠️ Queue empty after size check!");
-            activeRequests--;
-            Utils::setBusy(false);
-            xSemaphoreGive(taskSemaphore); // Release the semaphore
-            return;
-        }
-
-        Serial.printf("Processing request: %s (Remaining in queue: %d)\n",
-                      taskParams->url.c_str(),
-                      uxQueueMessagesWaiting(requestQueue));
-
-        TaskHandle_t taskHandle;
-        BaseType_t result;
-
-        // Use httpTask as the default execution method if taskExec is nullptr
-        TaskExecCallback taskToExecute = taskParams->taskExec ? taskParams->taskExec : [taskParams]() {
-            httpTask(taskParams);
-        };
-
-        result = xTaskCreate(
-            [](void *params) {
-                auto *taskParams = static_cast<TaskParams *>(params);
-                if (taskParams->taskExec) {
-                    taskParams->taskExec(); // Execute the custom taskExec callback
-                } else {
-                    httpTask(taskParams); // Execute the default HTTP task
-                }
-                delete taskParams;
-                Utils::setBusy(false);
-                xSemaphoreGive(taskSemaphore); // Release the semaphore after task completion
-                vTaskDelete(nullptr);
-            },
-            "TASK_EXEC",
-            STACK_SIZE,
-            taskParams,
-            TASK_PRIORITY,
-            &taskHandle);
-
-        if (result != pdPASS) {
-            Serial.println("Failed to create HTTP request task");
-            delete taskParams;
-            Utils::setBusy(false);
-            xSemaphoreGive(taskSemaphore); // Release the semaphore on failure
-        }
-    } else {
-        // Serial.println("⚠️ Could not acquire semaphore, skipping task processing");
+    if (activeRequests > maxConcurrentRequests) {
+        maxConcurrentRequests = activeRequests;
     }
-}
+    Serial.printf("Active requests: %d (Max seen: %d)\n", activeRequests, maxConcurrentRequests);
 
-void TaskManager::httpTask(void *params) {
-    auto *taskParams = static_cast<TaskParams *>(params);
-
-    Serial.printf("🔵 Starting HTTP request for: %s\n", taskParams->url.c_str());
-
-    {
-        HTTPClient http;
-        WiFiClientSecure client;
-        client.setInsecure();
-
-        http.begin(client, taskParams->url);
-        http.setTimeout(10000); // 10 second timeout
-
-        int httpCode = http.GET();
-        String response;
-
-        if (httpCode > 0) {
-            response = http.getString();
-            // Serial.printf("🟢 HTTP response for %s:\n%s\n", taskParams->url.c_str(), response.c_str());
-        } else {
-            Serial.printf("🔴 HTTP request failed, error code: %d\n", httpCode);
-        }
-
-        http.end();
-        client.stop();
-
-        // Explicitly reset the objects
-        http.~HTTPClient(); // Call the destructor
-        new (&http) HTTPClient(); // Reinitialize using placement new
-
-        client.~WiFiClientSecure(); // Call the destructor
-        new (&client) WiFiClientSecure(); // Reinitialize using placement new
-
-        // Call preProcessResponse if provided
-        if (taskParams->preProcessResponse) {
-            taskParams->preProcessResponse(httpCode, response);
-        }
-
-        auto *responseData = new ResponseData{
-            httpCode,
-            response,
-            taskParams->callback};
-
-        if (xQueueSend(responseQueue, &responseData, 0) != pdPASS) {
-            Serial.println("Failed to queue response");
-            delete responseData;
-        }
+    // Get next request
+    TaskParams *taskParams;
+    if (xQueueReceive(requestQueue, &taskParams, 0) != pdPASS) {
+        Serial.println("⚠️ Queue empty after size check!");
+        activeRequests--;
+        Utils::setBusy(false);
+        xSemaphoreGive(taskSemaphore);
+        return;
     }
 
-    Serial.printf("🟢 Completed HTTP request for: %s\n", taskParams->url.c_str());
-    activeRequests--;
-    Serial.printf("Active requests now: %d\n", activeRequests);
+    Serial.printf("Processing request: %s (Remaining in queue: %d)\n",
+                  taskParams->url.c_str(),
+                  uxQueueMessagesWaiting(requestQueue));
 
-    delete taskParams;
-    Utils::setBusy(false);
-    xSemaphoreGive(taskSemaphore); // Release the semaphore after task completion
-    Serial.println("✅ Released semaphore");
-    vTaskDelete(nullptr);
+    TaskHandle_t taskHandle;
+    BaseType_t result = xTaskCreate(
+        [](void *params) {
+            auto *taskParams = static_cast<TaskParams *>(params);
+            taskParams->taskExec();
+            delete taskParams; // Ensure cleanup after execution
+            Utils::setBusy(false);
+            xSemaphoreGive(taskSemaphore);
+            Serial.println("✅ Released semaphore");
+            vTaskDelete(nullptr);
+        },
+        "TASK_EXEC",
+        STACK_SIZE,
+        taskParams,
+        TASK_PRIORITY,
+        &taskHandle);
+
+    if (result != pdPASS) {
+        Serial.println("Failed to create HTTP request task");
+        delete taskParams; // Ensure the object is deleted if task creation fails
+        Utils::setBusy(false);
+        xSemaphoreGive(taskSemaphore);
+    }
 }
 
 void TaskManager::processTaskResponses() {
@@ -180,7 +108,7 @@ void TaskManager::processTaskResponses() {
     ResponseData *responseData;
     while (xQueueReceive(responseQueue, &responseData, 0) == pdPASS) {
         responseData->callback(responseData->httpCode, responseData->response);
-        delete responseData;
+        delete responseData; // Ensure the object is deleted after processing
     }
 }
 

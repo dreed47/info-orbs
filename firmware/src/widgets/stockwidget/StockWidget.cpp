@@ -51,13 +51,11 @@ void StockWidget::update(bool force) {
             
             StockDataModel& stock = m_stocks[i];
 
-            // Create a task using TaskFactory
-            Task *task = TaskFactory::createHttpTask(url, [this, &stock](int httpCode, const String &response) {
+            auto task = TaskFactory::createHttpTask(url, [this, &stock](int httpCode, const String &response) {
                 processResponse(stock, httpCode, response);
             });
 
-            // Add the task to the TaskManager
-            TaskManager::getInstance()->addTask(task);
+            TaskManager::getInstance()->addTask(std::move(task));
         }
 
         m_stockDelayPrev = millis();

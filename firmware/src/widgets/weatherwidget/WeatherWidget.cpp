@@ -75,13 +75,11 @@ bool WeatherWidget::getWeatherData() {
                                String(m_weatherLocation.c_str()) + "/next3days?key=" + weatherApiKey + "&unitGroup=" + weatherUnits +
                                "&include=days,current&iconSet=icons1&lang=" + LOC_LANG;
 
-    // Create a task using TaskFactory
-    Task *task = TaskFactory::createHttpTask(httpRequestAddress, [this](int httpCode, const String &response) {
+    auto task = TaskFactory::createHttpTask(httpRequestAddress, [this](int httpCode, const String &response) {
         processResponse(httpCode, response);
     });
 
-    // Add the task to the TaskManager
-    return TaskManager::getInstance()->addTask(task);
+    return TaskManager::getInstance()->addTask(std::move(task));
 }
 
 void WeatherWidget::preProcessResponse(int httpCode, String& response) {
