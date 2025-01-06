@@ -1,6 +1,6 @@
 #include "TaskFactory.h"
 #include "GlobalResources.h"
-#include "TaskManager.h" // Include TaskManager.h to access TaskParams and ResponseData
+#include "TaskManager.h"
 #include "Utils.h"
 #include <HTTPClient.h>
 
@@ -24,8 +24,8 @@ void TaskFactory::httpTask(const String &url, Task::ResponseCallback callback, T
             Serial.printf("🔴 HTTP request failed, error code: %d\n", httpCode);
         }
 
-        http.end(); // Proper cleanup of HTTPClient
-        client.stop(); // Proper cleanup of WiFiClientSecure
+        http.end();
+        client.stop();
 
         // Explicitly reset the objects
         http.~HTTPClient(); // Call the destructor
@@ -44,15 +44,12 @@ void TaskFactory::httpTask(const String &url, Task::ResponseCallback callback, T
             delete responseData; // Ensure cleanup if queueing fails
         }
     }
-    
+    TaskManager::activeRequests--;
+
+#ifdef TASKMANAGER_DEBUG
+    Serial.printf("Active requests now: %d\n", TaskManager::activeRequests);
     UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
     Serial.print("Remaining task stack space: ");
     Serial.println(highWater);
-
-    TaskManager::activeRequests--;
-    Serial.printf("Active requests now: %d\n", TaskManager::activeRequests);
-    Utils::setBusy(false);
-    xSemaphoreGive(taskSemaphore); // Release semaphore
-    Serial.println("✅ Released semaphore");
-    vTaskDelete(nullptr); // FreeRTOS task termination
+#endif
 }
