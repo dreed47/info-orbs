@@ -17,6 +17,11 @@ public:
             url, callback, [url, callback, preProcess]() { TaskFactory::httpGetTask(url, callback, preProcess); }, preProcess);
     }
 
+    static std::unique_ptr<Task> createHttpPostTask(const String &url, const String &payload, Task::ResponseCallback callback, Task::PreProcessCallback preProcess = nullptr) {
+        return make_unique<Task>(
+            url, callback, [url, payload, callback, preProcess]() { TaskFactory::httpPostTask(url, payload, callback, preProcess); }, preProcess);
+    }
+
     static std::unique_ptr<Task> createMqttTask(const String &topic, Task::ResponseCallback callback) {
         return make_unique<Task>(
             topic, callback, []() {
@@ -25,8 +30,9 @@ public:
             nullptr);
     }
 
-    // Declare the httpGetTask method
     static void httpGetTask(const String &url, Task::ResponseCallback callback, Task::PreProcessCallback preProcess);
+
+    static void httpPostTask(const String &url, const String &payload, Task::ResponseCallback callback, Task::PreProcessCallback preProcess);
 };
 
 #endif // TASK_FACTORY_H
