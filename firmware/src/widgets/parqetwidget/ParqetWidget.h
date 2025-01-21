@@ -51,6 +51,10 @@ private:
     void clearScreen(int8_t displayIndex, int32_t background);
     void displayClock(int8_t displayIndex, uint32_t background, uint32_t color, String extra, uint32_t extraColor);
 
+    // New helper functions for handling HTTP responses
+    void handlePortfolioResponse(int httpCode, const String &response);
+    void handlePortfolioChartResponse(int httpCode, const String &response);
+
     GlobalTime *m_time;
 
     unsigned long m_stockDelay = 15 * 60 * 1000; // default to 15m between updates

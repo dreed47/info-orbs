@@ -4,6 +4,7 @@
 #include "Utils.h"
 #include <ArduinoLog.h>
 #include <HTTPClient.h>
+#include <StreamUtils.h>
 
 void TaskFactory::httpGetTask(const String &url, Task::ResponseCallback callback, Task::PreProcessCallback preProcess) {
     Log.noticeln("🔵 Starting HTTP request for: %s", url.c_str());
@@ -69,25 +70,15 @@ void TaskFactory::httpPostTask(const String &url, const String &payload, Task::R
         int httpCode = http.POST(payload);
         String response;
 
-        if (httpCode > 0) {
+        if (httpCode == 200) {
             // Check if the response is chunked
             if (http.header("Transfer-Encoding") == "chunked") {
                 Log.noticeln("🔵 Response is chunked, processing stream...");
 
                 // Use a stream to read the response in chunks
-                WiFiClient *stream = http.getStreamPtr();
-                if (stream) {
-                    while (stream->connected() || stream->available()) {
-                        while (stream->available()) {
-                            char c = stream->read();
-                            response += c;
-                        }
-                        // Small delay to allow more data to arrive
-                        delay(10);
-                    }
-                } else {
-                    Log.errorln("🔴 Failed to get stream pointer");
-                }
+                Stream &rawStream = http.getStream();
+                ChunkDecodingStream decodedStream(rawStream);
+                response = decodedStream.readString();
             } else {
                 // If not chunked, read the entire response at once
                 response = http.getString();

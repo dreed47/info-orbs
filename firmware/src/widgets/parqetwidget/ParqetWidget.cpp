@@ -125,90 +125,7 @@ void ParqetWidget::updatePortfolio() {
 
     auto task = TaskFactory::createHttpPostTask(
         httpRequestAddress, postPayload, [this](int httpCode, const String &response) {
-            if (httpCode > 0) {
-                JsonDocument doc;
-                JsonDocument filter;
-                // Filter the response to save memory
-                filter["holdings"][0]["assetType"] = true;
-                filter["holdings"][0]["currency"] = true;
-                filter["holdings"][0]["asset"] = true;
-                filter["holdings"][0]["sharedAsset"]["name"] = true;
-                filter["holdings"][0]["performance"] = true;
-                filter["holdings"][0]["position"] = true;
-                filter["performance"]["purchaseValueForInterval"] = true;
-                filter["performance"]["portfolioValue"] = true;
-
-                PARQET_DEBUG_PRINT_MEM("Parsing portfolio JSON now...");
-                DeserializationError error = deserializeJson(doc, response, DeserializationOption::Filter(filter));
-                PARQET_DEBUG_PRINT_MEM("after deserializeJson()");
-
-                if (!error) {
-                    JsonArray holdings = doc["holdings"];
-                    // Initialize a new array (reserve one extra element for totals)
-                    ParqetHoldingDataModel *holdingArray = new ParqetHoldingDataModel[holdings.size() + 1];
-                    PARQET_DEBUG_PRINT_MEM("after new holdingArray");
-                    int count = 0;
-                    for (JsonVariant holding : holdings) {
-                        String type = holding["assetType"].as<String>();
-                        if (type == "security" || type == "crypto") {
-                            // stocks or etf/funds
-                            String id = holding["asset"]["identifier"].as<String>();
-                            String name = holding["sharedAsset"]["name"].as<String>();
-                            float purchasePrice = holding["performance"]["priceAtIntervalStart"].as<float>();
-                            float purchaseValue = holding["performance"]["purchaseValueForInterval"].as<float>();
-                            float currentPrice = holding["position"]["currentPrice"].as<float>();
-                            float currentValue = holding["position"]["currentValue"].as<float>();
-                            float shares = holding["position"]["shares"].as<float>();
-                            bool isSold = holding["position"]["isSold"].as<bool>();
-                            String currency = holding["currency"].as<String>();
-                            if (isSold || currentValue == 0) {
-                                // Serial.printf("Skipping %s, %s\n", name.c_str(), id.c_str());
-                            } else {
-                                // Serial.printf("Name: %s, id: %s, cur: %s, start: %.2f, now: %.2f, curValue: %.2f\n", name.c_str(), id.c_str(), currency.c_str(), purchasePrice, currentPrice, currentValue);
-                                ParqetHoldingDataModel h = ParqetHoldingDataModel();
-                                h.setId(id);
-                                h.setName(name);
-                                h.setPurchasePrice(purchasePrice);
-                                h.setPurchaseValue(purchaseValue);
-                                h.setCurrentPrice(currentPrice);
-                                h.setCurrentValue(currentValue);
-                                h.setShares(shares);
-                                h.setCurrency(currency);
-                                holdingArray[count++] = h;
-                            }
-                        } else {
-                            PARQET_DEBUG_PRINT("Invalid type: %s, id: %s", type.c_str(), holding["_id"].as<String>().c_str());
-                        }
-                    }
-                    // Add total
-                    if (m_showTotalScreen) {
-                        JsonVariant perf = doc["performance"];
-                        ParqetHoldingDataModel h = ParqetHoldingDataModel();
-                        h.setId("total");
-                        h.setName("T O T A L");
-                        h.setPurchasePrice(perf["purchaseValueForInterval"].as<float>());
-                        h.setPurchaseValue(perf["purchaseValueForInterval"].as<float>());
-                        h.setCurrentPrice(perf["portfolioValue"].as<float>());
-                        h.setCurrentValue(perf["portfolioValue"].as<float>());
-                        h.setShares(1);
-                        // AFAIK, the whole portfolio is shown in the same currency.
-                        // To avoid another HTTP request, we just use the currency of the first holding
-                        if (count > 0) {
-                            h.setCurrency(holdingArray[0].getCurrency());
-                        }
-                        holdingArray[count++] = h;
-                    }
-                    m_portfolio.setHoldings(holdingArray, count);
-                    PARQET_DEBUG_PRINT_MEM("after setHoldings()");
-                } else {
-                    // Handle JSON deserialization error
-                    Serial.println("deserializeJson() failed");
-                    Serial.println(error.c_str());
-                }
-            } else {
-                // Handle HTTP request error
-                Serial.printf("HTTP request failed, error: %s\n", HTTPClient::errorToString(httpCode).c_str());
-            }
+            handlePortfolioResponse(httpCode, response);
         });
 
     if (!task) {
@@ -245,41 +162,7 @@ void ParqetWidget::updatePortfolioChart() {
 
     auto task = TaskFactory::createHttpPostTask(
         httpRequestAddress, postPayload, [this](int httpCode, const String &response) {
-            if (httpCode > 0) {
-                JsonDocument doc;
-                JsonDocument filter;
-                // Filter the response to save memory
-                filter["charts"][0]["values"]["perfHistory"] = true;
-                PARQET_DEBUG_PRINT_MEM("Parsing chart JSON now...");
-                DeserializationError error = deserializeJson(doc, response, DeserializationOption::Filter(filter));
-                PARQET_DEBUG_PRINT_MEM("after deserializeJson()");
-
-                if (!error) {
-                    JsonArray charts = doc["charts"];
-                    bool first = true;
-                    // Initialize a new array
-                    float *chartsArray = new float[charts.size()];
-                    int count = 0;
-                    for (JsonVariant chart : charts) {
-                        if (first) {
-                            // Skip first data point (because the first two will be SOD/EOD of the same date and SOD always has perf==0)
-                            first = false;
-                        } else {
-                            float perf = chart["values"]["perfHistory"];
-                            chartsArray[count++] = perf;
-                            // printf("Chart data %d: %.2f\n", count, perf);
-                        }
-                    }
-                    m_portfolio.setChartData(chartsArray, count);
-                } else {
-                    // Handle JSON deserialization error
-                    Serial.println("deserializeJson() failed");
-                    Serial.println(error.c_str());
-                }
-            } else {
-                // Handle HTTP request error
-                Serial.printf("HTTP request failed, error: %s\n", HTTPClient::errorToString(httpCode).c_str());
-            }
+            handlePortfolioChartResponse(httpCode, response);
         });
 
     if (!task) {
@@ -421,6 +304,212 @@ void ParqetWidget::displayStock(int8_t displayIndex, ParqetHoldingDataModel &sto
     m_manager.fillRect(0, 176, ScreenWidth, 5, stockColor);
     m_manager.drawArc(120, 120, 120, 115, 0, 360, stockColor, backgroundColor);
     m_manager.drawString(stock.getPercentChange(2) + "%", ScreenCenterX, 205, 22, Align::MiddleCenter);
+}
+
+void ParqetWidget::handlePortfolioResponse(int httpCode, const String &response) {
+    if (httpCode > 0) {
+        // Increase capacity for large responses
+        DynamicJsonDocument doc(96 * 1024); // 96KB capacity
+        StaticJsonDocument<2048> filter; // Filter document
+
+        // More aggressive filtering
+        filter["holdings"][0]["assetType"] = true;
+        filter["holdings"][0]["currency"] = true;
+        filter["holdings"][0]["asset"]["identifier"] = true;
+        filter["holdings"][0]["sharedAsset"]["name"] = true;
+        filter["holdings"][0]["performance"]["priceAtIntervalStart"] = true;
+        filter["holdings"][0]["performance"]["purchaseValueForInterval"] = true;
+        filter["holdings"][0]["position"]["currentPrice"] = true;
+        filter["holdings"][0]["position"]["currentValue"] = true;
+        filter["holdings"][0]["position"]["shares"] = true;
+        filter["holdings"][0]["position"]["isSold"] = true;
+        filter["performance"]["purchaseValueForInterval"] = true;
+        filter["performance"]["value"] = true;
+
+        PARQET_DEBUG_PRINT_MEM("Before JSON parsing");
+
+        // Create string stream for large responses
+        DeserializationError error;
+        if (response.length() > 16384) {
+            Serial.printf("Large JSON response (%d bytes), using string stream\n", response.length());
+            StringStream stream(response);
+            error = deserializeJson(doc, stream, DeserializationOption::Filter(filter));
+        } else {
+            error = deserializeJson(doc, response, DeserializationOption::Filter(filter));
+        }
+
+        PARQET_DEBUG_PRINT_MEM("After JSON parsing");
+
+        if (!error) {
+            JsonArray holdings = doc["holdings"];
+            // Initialize a new array (reserve one extra element for totals)
+            ParqetHoldingDataModel *holdingArray = new ParqetHoldingDataModel[holdings.size() + 1];
+            PARQET_DEBUG_PRINT_MEM("after new holdingArray");
+            int count = 0;
+            for (JsonVariant holding : holdings) {
+                String type = holding["assetType"].as<String>();
+                if (type == "security" || type == "crypto") {
+                    // stocks or etf/funds
+                    String id = holding["asset"]["identifier"].as<String>();
+                    String name = holding["sharedAsset"]["name"].as<String>();
+                    float purchasePrice = holding["performance"]["priceAtIntervalStart"].as<float>();
+                    float purchaseValue = holding["performance"]["purchaseValueForInterval"].as<float>();
+                    float currentPrice = holding["position"]["currentPrice"].as<float>();
+                    float currentValue = holding["position"]["currentValue"].as<float>();
+                    float shares = holding["position"]["shares"].as<float>();
+                    bool isSold = holding["position"]["isSold"].as<bool>();
+                    String currency = holding["currency"].as<String>();
+                    if (isSold || currentValue == 0) {
+                        // Serial.printf("Skipping %s, %s\n", name.c_str(), id.c_str());
+                    } else {
+                        // Serial.printf("Name: %s, id: %s, cur: %s, start: %.2f, now: %.2f, curValue: %.2f\n", name.c_str(), id.c_str(), currency.c_str(), purchasePrice, currentPrice, currentValue);
+                        ParqetHoldingDataModel h = ParqetHoldingDataModel();
+                        h.setId(id);
+                        h.setName(name);
+                        h.setPurchasePrice(purchasePrice);
+                        h.setPurchaseValue(purchaseValue);
+                        h.setCurrentPrice(currentPrice);
+                        h.setCurrentValue(currentValue);
+                        h.setShares(shares);
+                        h.setCurrency(currency);
+                        holdingArray[count++] = h;
+                    }
+                } else {
+                    PARQET_DEBUG_PRINT("Invalid type: %s, id: %s", type.c_str(), holding["_id"].as<String>().c_str());
+                }
+            }
+            // Add total
+            if (m_showTotalScreen) {
+                JsonVariant perf = doc["performance"];
+                ParqetHoldingDataModel h = ParqetHoldingDataModel();
+                h.setId("total");
+                h.setName("T O T A L");
+                h.setPurchasePrice(perf["purchaseValueForInterval"].as<float>());
+                h.setPurchaseValue(perf["purchaseValueForInterval"].as<float>());
+                h.setCurrentPrice(perf["value"].as<float>());
+                h.setCurrentValue(perf["value"].as<float>());
+                h.setShares(1);
+                // AFAIK, the whole portfolio is shown in the same currency.
+                // To avoid another HTTP request, we just use the currency of the first holding
+                if (count > 0) {
+                    h.setCurrency(holdingArray[0].getCurrency());
+                }
+                holdingArray[count++] = h;
+            }
+            m_portfolio.setHoldings(holdingArray, count);
+            PARQET_DEBUG_PRINT_MEM("after setHoldings()");
+        } else {
+            // Handle JSON deserialization error
+            Serial.print("deserializeJson() failed: ");
+            Serial.println(error.c_str());
+            Serial.println("Response: " + response);
+
+            // Clear existing portfolio data
+            ParqetHoldingDataModel *holdingArray = new ParqetHoldingDataModel[1];
+            ParqetHoldingDataModel h = ParqetHoldingDataModel();
+            h.setId("error");
+            h.setName("JSON Error");
+            h.setCurrency("ERR");
+            h.setPurchasePrice(0);
+            h.setCurrentPrice(0);
+            h.setShares(0);
+            holdingArray[0] = h;
+            m_portfolio.setHoldings(holdingArray, 1);
+
+            // Show error on display if clock is enabled
+            if (m_everDrawn && m_showClock) {
+                displayClock(0, TFT_BLACK, TFT_RED, "JSON Error", TFT_RED);
+            }
+        }
+    } else {
+        // Handle HTTP request error
+        Serial.printf("HTTP request failed, error: %s\n", HTTPClient::errorToString(httpCode).c_str());
+
+        // Clear existing portfolio data
+        ParqetHoldingDataModel *holdingArray = new ParqetHoldingDataModel[1];
+        ParqetHoldingDataModel h = ParqetHoldingDataModel();
+        h.setId("error");
+        h.setName("HTTP Error");
+        h.setCurrency("ERR");
+        h.setPurchasePrice(0);
+        h.setCurrentPrice(0);
+        h.setShares(0);
+        holdingArray[0] = h;
+        m_portfolio.setHoldings(holdingArray, 1);
+
+        // Show error on display if clock is enabled
+        if (m_everDrawn && m_showClock) {
+            displayClock(0, TFT_BLACK, TFT_RED, "HTTP Error", TFT_RED);
+        }
+    }
+}
+
+void ParqetWidget::handlePortfolioChartResponse(int httpCode, const String &response) {
+    if (httpCode > 0) {
+        // Increase capacity for chart data
+        DynamicJsonDocument doc(32 * 1024); // 32KB for chart data
+        StaticJsonDocument<1024> filter; // Filter document
+
+        // Strict filtering for chart data
+        filter["charts"][0]["values"]["perfHistory"] = true;
+
+        PARQET_DEBUG_PRINT_MEM("Before chart JSON parsing");
+
+        // Create string stream for large responses
+        DeserializationError error;
+        if (response.length() > 16384) {
+            Serial.printf("Large chart JSON response (%d bytes), using string stream\n", response.length());
+            StringStream stream(response);
+            error = deserializeJson(doc, stream, DeserializationOption::Filter(filter));
+        } else {
+            error = deserializeJson(doc, response, DeserializationOption::Filter(filter));
+        }
+
+        PARQET_DEBUG_PRINT_MEM("After chart JSON parsing");
+
+        if (!error) {
+            JsonArray charts = doc["charts"];
+            bool first = true;
+            // Initialize a new array
+            float *chartsArray = new float[charts.size()];
+            int count = 0;
+            for (JsonVariant chart : charts) {
+                if (first) {
+                    // Skip first data point (because the first two will be SOD/EOD of the same date and SOD always has perf==0)
+                    first = false;
+                } else {
+                    float perf = chart["values"]["perfHistory"];
+                    chartsArray[count++] = perf;
+                    // printf("Chart data %d: %.2f\n", count, perf);
+                }
+            }
+            m_portfolio.setChartData(chartsArray, count);
+        } else {
+            // Handle JSON deserialization error
+            Serial.print("deserializeJson() failed for chart: ");
+            Serial.println(error.c_str());
+            Serial.println("Response: " + response);
+
+            // Clear chart data on error
+            m_portfolio.clearChartData();
+
+            // Show error on display if clock is enabled
+            if (m_everDrawn && m_showClock) {
+                displayClock(0, TFT_BLACK, TFT_RED, "Chart Error", TFT_RED);
+            }
+        }
+    } else {
+        // Handle HTTP request error
+        Serial.printf("[Parqet] Chart HTTP request failed, error: %s\n", HTTPClient::errorToString(httpCode).c_str());
+
+        // Clear chart data on error
+        m_portfolio.clearChartData();
+
+        // Show error on display if clock is enabled
+        if (m_everDrawn && m_showClock) {
+            displayClock(0, TFT_BLACK, TFT_RED, "Chart Error", TFT_RED);
+        }
+    }
 }
 
 String ParqetWidget::getName() {
