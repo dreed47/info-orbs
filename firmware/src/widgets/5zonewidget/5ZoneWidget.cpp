@@ -14,22 +14,22 @@ FiveZoneWidget::FiveZoneWidget(ScreenManager &manager, ConfigManager &config) : 
     m_config.addConfigBool("FiveZoneWidget", "showBizHours", &m_showBizHours, t_5zoneShowBizHours, false);
 
     for (int i = 0; i < MAX_ZONES; i++) {
-        const char *zoneName = strdup((String("5zoZoneName") + String(i)).c_str());
-        const char *zoneLabel = strdup((i18nStr(t_5zoneLabel) + " " + String(i) + ": ").c_str());
+        const char *zoneName = strdup((String("5zoZoneName") + String(i + 1)).c_str());
+        const char *zoneLabel = strdup((i18nStr(t_5zoneLabel) + " " + String(i + 1) + ": ").c_str());
         m_config.addConfigString("FiveZoneWidget", zoneName, &m_timeZones[i].locName, 50, zoneLabel, false);
 
-        const char *zoneTZ = strdup((String("5zoZoneInfo") + String(i)).c_str());
-        const char *zoneTZLabel = strdup((i18nStr(t_5zoneTZLabel) + " " + String(i) + ": ").c_str());
+        const char *zoneTZ = strdup((String("5zoZoneCode") + String(i + 1)).c_str());
+        const char *zoneTZLabel = strdup((i18nStr(t_5zoneTZLabel) + " " + String(i + 1) + ": ").c_str());
         m_config.addConfigString("FiveZoneWidget", zoneTZ, &m_timeZones[i].tzInfo, 50, zoneTZLabel, false);
     }
 
     for (int i = 0; i < MAX_ZONES; i++) {
-        const char *zoneWorkStart = strdup((String("5zoZoneWstart") + String(i)).c_str());
-        const char *zoneWorkStartLabel = strdup((i18nStr(t_5zoneWorkStartLabel) + " " + String(i) + ": ").c_str());
+        const char *zoneWorkStart = strdup((String("5zoZoneWstart") + String(i + 1)).c_str());
+        const char *zoneWorkStartLabel = strdup((i18nStr(t_5zoneWorkStartLabel) + " " + String(i + 1) + ": ").c_str());
         m_config.addConfigInt("FiveZoneWidget", zoneWorkStart, &m_timeZones[i].m_workStart, zoneWorkStartLabel, true);
 
-        const char *zoneWorkEnd = strdup((String("5zoZoneWend") + String(i)).c_str());
-        const char *zoneWorkEndLabel = strdup((i18nStr(t_5zoneWorkEndLabel) + " " + String(i) + ": ").c_str());
+        const char *zoneWorkEnd = strdup((String("5zoZoneWend") + String(i + 1)).c_str());
+        const char *zoneWorkEndLabel = strdup((i18nStr(t_5zoneWorkEndLabel) + " " + String(i + 1) + ": ").c_str());
         m_config.addConfigInt("FiveZoneWidget", zoneWorkEnd, &m_timeZones[i].m_workEnd, zoneWorkEndLabel, true);
     }
     m_format = m_config.getConfigInt("clockFormat", 0);

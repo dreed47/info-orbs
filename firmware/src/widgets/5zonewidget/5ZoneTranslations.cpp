@@ -14,7 +14,7 @@ constexpr Translation t_5zoneEnable = {
 };
 
 constexpr Translation t_5zoneTZLabel = {
-    "Time Zone Info", // EN
+    "Time Zone Code", // EN
 };
 
 constexpr Translation t_5zoneWorkStartLabel = {
