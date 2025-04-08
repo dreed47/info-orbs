@@ -29,7 +29,9 @@
 #if INCLUDE_MATRIXSCREEN != WIDGET_DISABLED
     #include "matrixwidget/MatrixWidget.h"
 #endif
-
+#if INCLUDE_BASEBALL != WIDGET_DISABLED
+    #include "baseballwidget/BaseballWidget.h"
+#endif
 void registerWidgets(WidgetSet *widgetSet, ScreenManager *sm, ConfigManager *config) {
     // Always add clock widget
     widgetSet->add(new ClockWidget(*sm, *config));
@@ -66,5 +68,9 @@ void registerWidgets(WidgetSet *widgetSet, ScreenManager *sm, ConfigManager *con
 
 #if INCLUDE_MATRIXSCREEN != WIDGET_DISABLED
     widgetSet->add(new MatrixWidget(*sm, *config));
+#endif
+
+#if INCLUDE_BASEBALL != WIDGET_DISABLED
+    widgetSet->add(new BaseballWidget(*sm, *config));
 #endif
 }
