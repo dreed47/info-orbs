@@ -42,6 +42,10 @@ private:
     StockDataModel m_stocks[MAX_STOCKS];
     int8_t m_stockCount;
 
+#ifndef STOCK_API_URL
+    #define STOCK_API_URL "https://api.twelvedata.com/quote"
+#endif
+
 #ifndef STOCK_CHANGE_FORMAT
     #define STOCK_CHANGE_FORMAT 0
 #endif

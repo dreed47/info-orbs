@@ -74,7 +74,7 @@ void StockWidget::update(bool force) {
     // Queue requests for each stock
     for (int8_t i = 0; i < m_stockCount; i++) {
         Log.traceln("StockWidget::update - %s", m_stocks[i].getSymbol().c_str());
-        String url = "https://api.twelvedata.com/quote?apikey=e03fc53524454ab8b65d91b23c669cc5&symbol=" + m_stocks[i].getSymbol();
+        String url = String(STOCK_API_URL) + "?apikey=" + String(STOCK_API_KEY) + "&symbol=" + m_stocks[i].getSymbol();
 
         StockDataModel &stock = m_stocks[i];
 
