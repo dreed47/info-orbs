@@ -42,6 +42,7 @@ public:
     String getName() override;
 
 private:
+    void processResponse(TimeZone &timeZone, int httpCode, const String &response);
     int getClockStamp();
     void getTZoneOffset(int8_t zoneIndex);
     void displayZone(int8_t displayIndex, bool force);
@@ -66,6 +67,17 @@ private:
     std::string m_timezoneLocation = TIMEZONE_API_LOCATION;
     int m_format = CLOCK_FORMAT;
     bool m_showBizHours;
+
+#ifndef FIVEZONE_UPDATE_DELAY
+    #define FIVEZONE_UPDATE_DELAY TimeFrequency::ThirtySeconds
+#endif
+
+#ifndef FIVEZONE_DRAW_DELAY
+    #define FIVEZONE_DRAW_DELAY TimeFrequency::FifteenSeconds
+#endif
+
+    WidgetTimer &m_drawTimer;
+    WidgetTimer &m_updateTimer;
 };
 
 #endif // FIVE_ZONE_WIDGET_H

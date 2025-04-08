@@ -1,9 +1,12 @@
 #include "5ZoneWidget.h"
 #include "5ZoneTranslations.h"
+#include "TaskFactory.h"
 #include <ArduinoJson.h>
 #include <ArduinoLog.h>
 
-FiveZoneWidget::FiveZoneWidget(ScreenManager &manager, ConfigManager &config) : Widget(manager, config) {
+FiveZoneWidget::FiveZoneWidget(ScreenManager &manager, ConfigManager &config) : Widget(manager, config),
+                                                                                m_drawTimer(addDrawRefreshFrequency(FIVEZONE_DRAW_DELAY)),
+                                                                                m_updateTimer(addUpdateRefreshFrequency(FIVEZONE_UPDATE_DELAY)) {
     m_enabled = (INCLUDE_5ZONE == WIDGET_ON);
     m_time = GlobalTime::getInstance();
 
@@ -12,22 +15,22 @@ FiveZoneWidget::FiveZoneWidget(ScreenManager &manager, ConfigManager &config) : 
 
     for (int i = 0; i < MAX_ZONES; i++) {
         const char *zoneName = strdup((String("5zoZoneName") + String(i)).c_str());
-        const char *zoneDesc = strdup((i18nStr(t_5zoneDesc) + " " + String(i) + ": ").c_str());
-        m_config.addConfigString("FiveZoneWidget", zoneName, &m_timeZones[i].locName, 50, zoneDesc, false);
+        const char *zoneLabel = strdup((i18nStr(t_5zoneLabel) + " " + String(i) + ": ").c_str());
+        m_config.addConfigString("FiveZoneWidget", zoneName, &m_timeZones[i].locName, 50, zoneLabel, false);
 
         const char *zoneTZ = strdup((String("5zoZoneInfo") + String(i)).c_str());
-        const char *zoneTZDesc = strdup((i18nStr(t_5zoneTZDesc) + " " + String(i) + ": ").c_str());
-        m_config.addConfigString("FiveZoneWidget", zoneTZ, &m_timeZones[i].tzInfo, 50, zoneTZDesc, false);
+        const char *zoneTZLabel = strdup((i18nStr(t_5zoneTZLabel) + " " + String(i) + ": ").c_str());
+        m_config.addConfigString("FiveZoneWidget", zoneTZ, &m_timeZones[i].tzInfo, 50, zoneTZLabel, false);
     }
 
     for (int i = 0; i < MAX_ZONES; i++) {
         const char *zoneWorkStart = strdup((String("5zoZoneWstart") + String(i)).c_str());
-        const char *zoneWorkStartDesc = strdup((i18nStr(t_5zoneWorkStartDesc) + " " + String(i) + ": ").c_str());
-        m_config.addConfigInt("FiveZoneWidget", zoneWorkStart, &m_timeZones[i].m_workStart, zoneWorkStartDesc, true);
+        const char *zoneWorkStartLabel = strdup((i18nStr(t_5zoneWorkStartLabel) + " " + String(i) + ": ").c_str());
+        m_config.addConfigInt("FiveZoneWidget", zoneWorkStart, &m_timeZones[i].m_workStart, zoneWorkStartLabel, true);
 
         const char *zoneWorkEnd = strdup((String("5zoZoneWend") + String(i)).c_str());
-        const char *zoneWorkEndDesc = strdup((i18nStr(t_5zoneWorkEndDesc) + " " + String(i) + ": ").c_str());
-        m_config.addConfigInt("FiveZoneWidget", zoneWorkEnd, &m_timeZones[i].m_workEnd, zoneWorkEndDesc, true);
+        const char *zoneWorkEndLabel = strdup((i18nStr(t_5zoneWorkEndLabel) + " " + String(i) + ": ").c_str());
+        m_config.addConfigInt("FiveZoneWidget", zoneWorkEnd, &m_timeZones[i].m_workEnd, zoneWorkEndLabel, true);
     }
     m_format = m_config.getConfigInt("clockFormat", 0);
 }
@@ -35,64 +38,79 @@ FiveZoneWidget::FiveZoneWidget(ScreenManager &manager, ConfigManager &config) : 
 void FiveZoneWidget::setup() {
 }
 
-void FiveZoneWidget::getTZoneOffset(int8_t zoneIndex) {
-
-    TimeZone &zone = m_timeZones[zoneIndex];
-    HTTPClient http;
-    http.begin(String(TIMEZONE_API_URL) + "?timeZone=" + String(zone.tzInfo.c_str()));
-
-    Serial.println(String(TIMEZONE_API_URL) + "?timeZone=" + String(zone.tzInfo.c_str()));
-
-    int httpCode = http.GET();
+void FiveZoneWidget::processResponse(TimeZone &timeZone, int httpCode, const String &response) {
     if (httpCode > 0) {
         JsonDocument doc;
-        DeserializationError error = deserializeJson(doc, http.getString());
+        DeserializationError error = deserializeJson(doc, response);
+
         if (!error) {
-            zone.timeZoneOffset = doc["currentUtcOffset"]["seconds"].as<int>();
-            if (doc["hasDayLightSaving"].as<bool>()) {
-                String dstStart = doc["dstInterval"]["dstStart"].as<String>();
-                String dstEnd = doc["dstInterval"]["dstEnd"].as<String>();
-                bool dstActive = doc["isDayLightSavingActive"].as<bool>();
-                tmElements_t m_temp_t;
-                if (dstActive) {
-                    m_temp_t.Year = dstEnd.substring(0, 4).toInt() - 1970;
-                    m_temp_t.Month = dstEnd.substring(5, 7).toInt();
-                    m_temp_t.Day = dstEnd.substring(8, 10).toInt();
-                    m_temp_t.Hour = dstEnd.substring(11, 13).toInt();
-                    m_temp_t.Minute = dstEnd.substring(14, 16).toInt();
-                    m_temp_t.Second = dstEnd.substring(17, 19).toInt();
-                } else {
-                    m_temp_t.Year = dstStart.substring(0, 4).toInt() - 1970;
-                    m_temp_t.Month = dstStart.substring(5, 7).toInt();
-                    m_temp_t.Day = dstStart.substring(8, 10).toInt();
-                    m_temp_t.Hour = dstStart.substring(11, 13).toInt();
-                    m_temp_t.Minute = dstStart.substring(14, 16).toInt();
-                    m_temp_t.Second = dstStart.substring(17, 19).toInt();
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, response);
+            if (!error) {
+                timeZone.timeZoneOffset = (doc["currentUtcOffset"]["seconds"].as<int>());
+                if (doc["hasDayLightSaving"].as<bool>()) {
+                    String dstStart = doc["dstInterval"]["dstStart"].as<String>();
+                    String dstEnd = doc["dstInterval"]["dstEnd"].as<String>();
+                    bool dstActive = doc["isDayLightSavingActive"].as<bool>();
+                    tmElements_t m_temp_t;
+                    if (dstActive) {
+                        m_temp_t.Year = dstEnd.substring(0, 4).toInt() - 1970;
+                        m_temp_t.Month = dstEnd.substring(5, 7).toInt();
+                        m_temp_t.Day = dstEnd.substring(8, 10).toInt();
+                        m_temp_t.Hour = dstEnd.substring(11, 13).toInt();
+                        m_temp_t.Minute = dstEnd.substring(14, 16).toInt();
+                        m_temp_t.Second = dstEnd.substring(17, 19).toInt();
+                    } else {
+                        m_temp_t.Year = dstStart.substring(0, 4).toInt() - 1970;
+                        m_temp_t.Month = dstStart.substring(5, 7).toInt();
+                        m_temp_t.Day = dstStart.substring(8, 10).toInt();
+                        m_temp_t.Hour = dstStart.substring(11, 13).toInt();
+                        m_temp_t.Minute = dstStart.substring(14, 16).toInt();
+                        m_temp_t.Second = dstStart.substring(17, 19).toInt();
+                    }
+                    timeZone.nextTimeZoneUpdate = makeTime(m_temp_t) + random(5 * 60); // Randomize update by 5 minutes to avoid flooding the API;
+
+                    int lv_idx = 0;
+                    do {
+                        if (m_timeZones[lv_idx].tzInfo == timeZone.tzInfo) {
+                            m_timeZones[lv_idx].timeZoneOffset = timeZone.timeZoneOffset;
+                            m_timeZones[lv_idx].nextTimeZoneUpdate = timeZone.nextTimeZoneUpdate;
+                        }
+                        lv_idx++;
+                    } while (lv_idx < MAX_ZONES);
                 }
-                zone.nextTimeZoneUpdate = makeTime(m_temp_t) + random(5 * 60); // Randomize update by 5 minutes to avoid flooding the API;
+            } else {
+                Log.warningln("Deserialization error on timezone offset API response");
             }
         } else {
-            Log.warningln("Deserialization error on timezone offset API response");
+            Log.warningln("Failed to get timezone offset from API : %d", error.c_str());
         }
-    } else {
-        Log.warningln("Failed to get timezone offset from API");
     }
 }
 
 void FiveZoneWidget::update(bool force) {
     m_time->updateTime(true);
-    int clockStamp = getClockStamp();
+    time_t lv_localEpoch = m_time->getUnixEpoch();
 
-    if (clockStamp != m_clockStampU || force) {
-        m_clockStampU = clockStamp;
-        time_t lv_localEpoch = m_time->getUnixEpoch();
+    for (int i = 0; i < MAX_ZONES; i++) {
+        TimeZone &zone = m_timeZones[i];
+        bool lv_dup = false;
+        int lv_idx = 0;
+        do {
+            if ((i != lv_idx) && (m_timeZones[lv_idx].tzInfo == zone.tzInfo))
+                lv_dup = true;
+            lv_idx++;
+        } while ((lv_idx < i) && !(lv_dup));
 
-        for (int i = 0; i < MAX_ZONES; i++) {
-            TimeZone &zone = m_timeZones[i];
-            if (zone.timeZoneOffset == -1 || (zone.nextTimeZoneUpdate > 0 && lv_localEpoch > zone.nextTimeZoneUpdate)) {
-                getTZoneOffset(i);
-                delay(100);
-            }
+        if ((zone.timeZoneOffset == -1 || (zone.nextTimeZoneUpdate > 0 && lv_localEpoch > zone.nextTimeZoneUpdate)) && !lv_dup) {
+
+            String url = String(TIMEZONE_API_URL) + "?timeZone=" + String(zone.tzInfo.c_str());
+
+            auto task = TaskFactory::createHttpGetTask(url, [this, &zone](int httpCode, const String &response) {
+                processResponse(zone, httpCode, response);
+            });
+
+            TaskManager::getInstance()->addTask(std::move(task));
         }
     }
 }
