@@ -543,3 +543,19 @@ void MainHelper::eraseNVSAndRestart() {
     Log.noticeln("Restarting ESP after NVS erase");
     ESP.restart();
 }
+
+void MainHelper::loadFeeds(FeedsManager &feedsManager) {
+    Log.noticeln("Loading feeds configuration...");
+
+    if (!feedsManager.loadFeedsFromJSON("/config/config.json")) {
+        Log.errorln("Failed to load feeds config");
+        return;
+    }
+
+    // Log loaded feeds
+    for (const auto &feed : feedsManager.getActiveFeeds()) {
+        Log.noticeln("Loaded feed: %s (%s)",
+                     feed.name.c_str(),
+                     feed.api_url.c_str());
+    }
+}

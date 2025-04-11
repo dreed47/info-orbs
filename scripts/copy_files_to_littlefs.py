@@ -9,6 +9,9 @@
 import re, shutil, os, os.path, glob
 from SCons.Script import Import
 
+CONFIG_JSON_SOURCE = "firmware/config/config.json"  
+CONFIG_JSON_DEST = "config/config.json"  
+
 # Extract macros from the config header file
 config_header_path = "firmware/config/config.h"
 config_system_header_path = "firmware/config/config.system.h"
@@ -186,6 +189,17 @@ def action():
         copy_files_to_builddir(to_copy)
     else:
         print("No files selected for embedding.")
+    # Always copy config.json
+    if os.path.exists(CONFIG_JSON_SOURCE):
+        dest_path = os.path.join(out_dir, CONFIG_JSON_DEST)
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+        shutil.copy2(CONFIG_JSON_SOURCE, dest_path)
+        print(f"Copied config.json to {dest_path}")
+    else:
+        print(f"Warning: Config file not found at {CONFIG_JSON_SOURCE}")
+
+    # Update build flags to include the config path
+    env.Append(BUILD_FLAGS=[f"-D CONFIG_FILE_PATH=\\\"{CONFIG_JSON_DEST}\\\""])        
 
 
 # I would prefer to use

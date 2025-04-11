@@ -1,7 +1,7 @@
+#include "FeedsManager.h"
 #include "GlobalResources.h"
 #include "GlobalTime.h"
 #include "MainHelper.h"
-
 #include "TaskFactory.h"
 #include "WidgetRegistry.h"
 #include "wifiwidget/WifiWidget.h"
@@ -15,6 +15,8 @@ ScreenManager *sm{nullptr};
 ConfigManager *config{nullptr};
 OrbsWiFiManager *wifiManager{nullptr};
 WidgetSet *widgetSet{nullptr};
+LittleFSHelper fsHelper;
+FeedsManager feedsManager(fsHelper);
 
 void setup() {
     // Initialize global resources
@@ -48,6 +50,7 @@ void setup() {
     MainHelper::init(wifiManager, config, sm, widgetSet);
     MainHelper::setupLittleFS();
     MainHelper::setupConfig();
+    MainHelper::loadFeeds(feedsManager);
     MainHelper::setupButtons();
     MainHelper::showWelcome();
 
@@ -89,6 +92,7 @@ void loop() {
         TaskManager::getInstance()->processAwaitingTasks();
         TaskManager::getInstance()->processTaskResponses();
     }
+
 #ifdef MEMORY_DEBUG_INTERVAL
     ShowMemoryUsage::printSerial();
 #endif

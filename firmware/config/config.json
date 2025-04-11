@@ -1,0 +1,101 @@
+{
+  "feeds": [
+    {
+      "name": "VisualCrossingFeed",
+      "active": false,
+      "api_url": "https://visualcrossingproxy.lzrk.net/visualcrossing/proxy/",
+      "api_key": "XW2RDGD6XK432AF25BNK2A3C7",
+      "update_interval": 60
+    },
+    {
+      "name": "OpenWeatherMapFeed",
+      "active": false,
+      "api_url": "https://openweatherproxy.lzrk.net/openweather/proxy",
+      "api_key": "1ef7287bfa21c45cdc43269e2e2dd201",
+      "update_interval": 60
+    },
+    {
+      "name": "TempestFeed",
+      "active": true,
+      "api_url": "https://info-orbs-proxy.onrender.com/tempest/proxy",
+      "api_key": "30699a7f-ba20-4f0b-874d-6d6173dbc87d",
+      "update_interval": 60
+    },
+    {
+      "name": "5zoneFeed",
+      "active": true,
+      "api_url": "https://info-orbs-proxy.onrender.com/timezone/proxy",
+      "api_key": null,
+      "update_interval": 60
+    },
+    {
+      "name": "BaseballFeed",
+      "active": true,
+      "api_url": "https://info-orbs-proxy.onrender.com/baseball/proxy",
+      "api_key": null,
+      "update_interval": 60
+    },
+    {
+      "name": "StockFeed",
+      "active": true,
+      "api_url": "https://api.twelvedata.com/quote",
+      "api_key": "a0b8f2c1d3e14f4b8a5c7e9f6c3e4d5e",
+      "update_interval": 60
+    }
+  ],
+  "widgets": [
+    {
+      "name": "ClockWidget",
+      "enable": "WIDGET_ON",
+      "api_url": "label",
+      "api_key": null
+    },
+    {
+      "name": "StockWidget",
+      "enable": "WIDGET_ON",
+      "api_url": "https://api.twelvedata.com/quote"
+    },
+    {
+      "name": "WeatherWidget",
+      "enable": "WIDGET_ON",
+      "data_feeds": [
+        {
+          "name": "VisualCrossingFeed",
+          "active": false,
+          "api_url": "https://visualcrossingproxy.lzrk.net/visualcrossing/proxy/",
+          "api_key": "XW2RDGD6XK432AF25BNK2A3C7"
+        },
+        {
+          "name": "OpenWeatherMapFeed",
+          "active": false,
+          "api_url": "https://openweatherproxy.lzrk.net/openweather/proxy",
+          "api_key": "1ef7287bfa21c45cdc43269e2e2dd201"
+        },
+        {
+          "name": "TempestFeed",
+          "active": true,
+          "api_url": "https://info-orbs-proxy.onrender.com/tempest/proxy",
+          "api_key": "30699a7f-ba20-4f0b-874d-6d6173dbc87d"
+        }
+      ]
+    },
+    {
+      "name": "5ZoneWidget",
+      "enable": "WIDGET_ON",
+      "api_url": "https://info-orbs-proxy.onrender.com/timezone/proxy",
+      "api_key": null
+    },
+    {
+      "name": "BaseballWidget",
+      "enable": "WIDGET_ON",
+      "api_url": "https://info-orbs-proxy.onrender.com/mlbdata/proxy",
+      "api_key": null
+    },
+    {
+      "name": "WebDataWidget",
+      "enable": "WIDGET_DISABLED",
+      "api_url": null,
+      "api_key": null
+    }
+  ]
+}

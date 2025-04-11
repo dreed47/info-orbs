@@ -3,6 +3,7 @@
 
 #include "Button.h"
 #include "ConfigManager.h"
+#include "FeedsManager.h"
 #include "OrbsWiFiManager.h"
 #include "ScreenManager.h"
 #include "ShowMemoryUsage.h"
@@ -84,6 +85,7 @@ public:
 
     static void printPrefix(Print *_logOutput, int logLevel);
     static void eraseNVSAndRestart();
+    static void loadFeeds(FeedsManager &feedsManager);
 };
 
 #endif
