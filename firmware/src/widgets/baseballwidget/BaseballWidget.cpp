@@ -127,6 +127,9 @@ void BaseballWidget::processResponse(BaseballDataModel &team, int httpCode, cons
             team.setLastGameResult(lastGame["result"].as<String>());
             team.setLastGameTime(lastGame["gameTime"].as<String>());
 
+            JsonObject lastTen = doc["lastTen"];
+            team.setLastTen(lastTen["record"].as<String>());
+
             JsonObject nextGame = doc["nextGame"];
             team.setNextGameDate(nextGame["date"].as<String>());
             team.setNextGameDay(nextGame["day"].as<String>());
@@ -182,8 +185,9 @@ void BaseballWidget::drawTeamInfoScreen(uint16_t primaryColor, uint16_t secondar
 
     m_manager.fillRect(0, contentTop, SCREEN_SIZE, contentHeight, TFT_BLACK);
     m_manager.setFontColor(TFT_WHITE, TFT_BLACK);
-    m_manager.drawCentreString(m_teamData.getShortName(), ScreenCenterX, contentCenterY - 20, 24);
-    m_manager.drawCentreString("Record: " + m_teamData.getRecord(), ScreenCenterX, contentCenterY + 20, 24);
+    m_manager.drawCentreString(m_teamData.getShortName(), ScreenCenterX, contentCenterY - 30, 24);
+    m_manager.drawCentreString("Record: " + m_teamData.getRecord(), ScreenCenterX, contentCenterY + 10, 24);
+    m_manager.drawCentreString("Last 10: " + m_teamData.getLastTen(), ScreenCenterX, contentCenterY + 65, 13);
 }
 
 void BaseballWidget::drawLastGameScreen(uint16_t primaryColor, uint16_t secondaryColor) {

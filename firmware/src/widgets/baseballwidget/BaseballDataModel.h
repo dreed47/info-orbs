@@ -51,6 +51,8 @@ public:
     String getLastGameResult();
     BaseballDataModel &setLastGameTime(String gameTime);
     String getLastGameTime();
+    BaseballDataModel &setLastTen(String lastTen);
+    String getLastTen();
     BaseballDataModel &setNextGameDate(String date);
     String getNextGameDate();
     BaseballDataModel &setNextGameDay(String day);
@@ -90,6 +92,7 @@ private:
     String m_lastGameScore = "";
     String m_lastGameResult = "";
     String m_lastGameTime = "";
+    String m_lastTen = "";
     String m_nextGameDate = "";
     String m_nextGameDay = "";
     String m_nextGameOpponent = "";

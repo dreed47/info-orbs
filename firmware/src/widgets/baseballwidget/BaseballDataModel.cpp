@@ -216,6 +216,17 @@ String BaseballDataModel::getLastGameTime() {
     return m_lastGameTime;
 }
 
+BaseballDataModel &BaseballDataModel::setLastTen(String lastTen) {
+    if (m_lastTen != lastTen) {
+        m_lastTen = lastTen;
+        m_changed = true;
+    }
+    return *this;
+}
+String BaseballDataModel::getLastTen() {
+    return m_lastTen;
+}
+
 // Next game methods
 BaseballDataModel &BaseballDataModel::setNextGameDate(String date) {
     if (m_nextGameDate != date) {
