@@ -1,6 +1,7 @@
 #include "GlobalResources.h"
 #include "MainHelper.h"
 #include "clockwidget/ClockWidget.h"
+#include "internetcheckwidget/InternetCheckWidget.h"
 #include "mqttwidget/MQTTWidget.h"
 #include "parqetwidget/ParqetWidget.h"
 #include "stockwidget/StockWidget.h"
@@ -30,6 +31,11 @@ void addWidgets() {
 #ifdef INCLUDE_PARQET
     widgetSet->add(new ParqetWidget(*sm, *config));
 #endif
+
+#ifdef INCLUDE_INTERNET_CHECK
+    widgetSet->add(new InternetCheckWidget(*sm, *config));
+#endif
+
 #ifdef INCLUDE_WEBDATA
     #ifdef WEB_DATA_WIDGET_URL
     widgetSet->add(new WebDataWidget(*sm, *config, WEB_DATA_WIDGET_URL));
